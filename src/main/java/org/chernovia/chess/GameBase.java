@@ -61,9 +61,7 @@ public class GameBase {
     }
 
     public List<GameRec> getTop(int n, String crit, ZonedDateTime date) {
-        List<GameRec> gameList = new ArrayList<>();
         try {
-            Client client = Client.basic();
             PreparedStatement ps;
             if (date == null) {
                  ps = conn.prepareStatement("SELECT * FROM tv_games ORDER BY " + crit + " DESC LIMIT ?");
@@ -74,40 +72,35 @@ public class GameBase {
                 ps.setString(1,date.format(DateTimeFormatter.ISO_DATE));
                 ps.setInt(2,n);
             }
-            LichessTVLogger.log("Fetching " + n + " games by: " + ps);
-            ResultSet rs = ps.executeQuery();
-            for (int i=0;i<n;i++) {
-                if (rs.next()) {
-                    String id = rs.getString("id");
-                    String pgn = client.games().pgnByGameId(id).get().toString();
-                    LichessTVLogger.log("PGN: " + pgn);
-                    gameList.add(new GameRec(id,pgn));
-                }
-            }
+            return getGames(ps,n);
         }
         catch (SQLException e) { oopsHandler(e,false); }
-
-        return gameList;
+        return new ArrayList<>();
     }
 
     public List<GameRec> getRandomGames(int n) {
-        List<GameRec> gameList = new ArrayList<>();
         try {
-            Client client = Client.basic();
             PreparedStatement ps;
             ps = conn.prepareStatement("SELECT *  FROM tv_games ORDER BY RAND() LIMIT ?");
             ps.setInt(1,n);
-            LichessTVLogger.log("Fetching " + n + " games by: " + ps);
-            ResultSet rs = ps.executeQuery();
-            for (int i=0;i<n;i++) {
-                if (rs.next()) {
-                    String id = rs.getString("id");
-                    String pgn = client.games().pgnByGameId(id).get().toString();
-                    gameList.add(new GameRec(id,pgn));
-                }
-            }
+            return getGames(ps,n);
         }
         catch (SQLException e) { oopsHandler(e,false); }
+        return new ArrayList<>();
+    }
+
+    public List<GameRec> getGames(PreparedStatement ps, int n) throws SQLException {
+        Client client = Client.basic();
+        List<GameRec> gameList = new ArrayList<>();
+        LichessTVLogger.log("Fetching " + n + " games by: " + ps);
+        ResultSet rs = ps.executeQuery();
+        for (int i=0;i<n;i++) {
+            if (rs.next()) {
+                String id = rs.getString("id");
+                String pgn = client.games().pgnByGameId(id).get().toString();
+                gameList.add(new GameRec(id,pgn));
+            }
+        }
         return gameList;
     }
 
