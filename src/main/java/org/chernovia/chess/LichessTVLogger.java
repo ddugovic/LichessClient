@@ -4,34 +4,13 @@ import chariot.Client;
 import chariot.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.java_websocket.client.WebSocketClient;
-
-import java.io.File;
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.logging.FileHandler;
 import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
-public class LichessTVLogger extends Thread implements LichessTVWatcher {
-    String clientID;
-    Client client;
+public class LichessTVLogger extends LichessClient implements Runnable, LichessTVWatcher {
     GameBase gameBase;
-    Enums.Channel channel = Enums.Channel.blitz; //Enums.Channel.bullet;
-    Map<String, LichessTVSock> tvClients = new HashMap<>();
-    static Logger logger = Logger.getLogger(LichessTVLogger.class.getName());
-    static FileHandler logFileHandler;
-    static File logFile;
-    long lastPurge = System.currentTimeMillis();
+    String dbUri, dbUsr, dbPwd, dbName;
     boolean logging;
     boolean running = true;
-    String dbUri, dbUsr, dbPwd, dbName;
 
     public static class ChariotException extends Exception {
         public ChariotException(int statusCode, String msg) {
@@ -41,7 +20,7 @@ public class LichessTVLogger extends Thread implements LichessTVWatcher {
 
     public static void main(String[] args) { //throws URISyntaxException, IOException {
         try {
-            new LichessTVLogger(args[0],args[1],args[2],args[3]).start();
+            new Thread(new LichessTVLogger(args[0],args[1],args[2],args[3])).start();
         }
         catch (Exception e) {
             log2File(Level.SEVERE,"Zoiks: " + e.getMessage());
@@ -81,44 +60,6 @@ public class LichessTVLogger extends Thread implements LichessTVWatcher {
         return tvGames;
     }
 
-    public void pause(long t) {
-        try { Thread.sleep(t); } catch (InterruptedException ignore) {}
-    }
-
-    public void purgeCheck() {
-        if (System.currentTimeMillis() - lastPurge > 15 * 60 * 1000) {
-            log2File(Level.INFO,"Purging: " + clientID);
-            tvClients.keySet().stream().filter(k -> tvClients.get(k).isClosed()).forEach(id -> tvClients.remove(id));
-            lastPurge = System.currentTimeMillis();
-        }
-    }
-
-    public void followGame(String id) {
-        pause(1000);
-        try {
-            LichessTVSock client = new LichessTVSock(id,this);
-            if (tvClients.put(id, client) == null) client.connect();
-        }
-        catch (URISyntaxException e) { log2File(Level.WARNING,"URI Augh: " + e.getMessage()); }
-    }
-
-    public boolean watchTVGames() {
-        try {
-            pause(1000);
-            loadTV().stream().filter(id -> tvClients.get(id) == null).forEach(this::followGame);
-            purgeCheck();
-            return true;
-        }
-        catch (Exception oops) {
-            if (oops instanceof ChariotException) {
-                log2File(Level.WARNING,"Chariot Goof: " + oops.getMessage());
-            } else {
-                log2File(Level.WARNING,"Unexpected Exception: " + oops.getMessage());
-            }
-        }
-        return false;
-    }
-
     public int calcAvgRating(Pgn pgn) {
         int bRat, wRat;
         String blackElo = pgn.tagMap().get("BlackElo");
@@ -147,7 +88,7 @@ public class LichessTVLogger extends Thread implements LichessTVWatcher {
             int upset = calcUpset(game.get(), pgn.get());
             if (moves > 12) {
                 log2File(Level.INFO,"Adding game: " + id + " (flux: " + flux + ", crowd: " + crowd + ", moves: " + moves + ")");
-                gameBase.addGame(id, avgRat, upset, moves, crowd, flux, channel.name(), pgn.get().tagMap().get("UTCDate"));
+                gameBase.addGame(id, avgRat, upset, moves, crowd, flux, currentChannel.name(), pgn.get().tagMap().get("UTCDate"));
             }
             else {
                 log2File(Level.INFO,"Skipping short game: " + id);
@@ -157,13 +98,6 @@ public class LichessTVLogger extends Thread implements LichessTVWatcher {
         else {
             log("Oops: PGN/Game not found: " + id);
         }
-    }
-
-    public Set<String> loadTV() throws ChariotException {
-        Many<Game> games = client.games().byChannel(channel);
-        if (games instanceof Fail(int statusCode, var err)) throw
-                new ChariotException(statusCode, "(loadTV) " + err.message());
-        return games.stream().map(Game::id).collect(Collectors.toSet());
     }
 
     @Override
@@ -201,39 +135,6 @@ public class LichessTVLogger extends Thread implements LichessTVWatcher {
             else if (winner == Enums.Color.black) return wRat - bRat;
             else return Math.abs(wRat - bRat)/4;
         } catch (NumberFormatException oops) { return 0; }
-    }
-
-    public static void updateLogfile() throws IOException {
-        String fileName = ZonedDateTime.now(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_DATE) + ".xml";
-        if (logFileHandler == null || !logFile.getName().equals(fileName)) {
-            log("Creating new log file: " + fileName);
-            logFile = new File("logs/" + fileName);
-            if (logFile.exists() && logFile.delete()) log("Deleted old log file: " + fileName);
-            if (logFile.exists() || logFile.createNewFile()) {
-                log("Log file created: " + logFile.getAbsolutePath());
-                if (logFileHandler != null) {
-                    logger.removeHandler(logFileHandler);
-                    logFileHandler.close();
-                }
-                logFileHandler = new FileHandler(logFile.getAbsolutePath());
-                logger.addHandler(logFileHandler);
-            }
-        }
-    }
-
-    public static void log2File(Level level, String message) {
-        try {
-            updateLogfile();
-            logger.log(level,message);
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static void log(String str) { log(str,true); }
-    public static void log(String str, boolean cr) {
-        if (cr) logger.log(Level.INFO,str); else System.out.print(str);
     }
 
 }

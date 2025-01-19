@@ -1,0 +1,110 @@
+package org.chernovia.chess;
+
+import chariot.Client;
+import chariot.model.Enums;
+import chariot.model.Fail;
+import chariot.model.Game;
+import chariot.model.Many;
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
+abstract public class LichessClient implements LichessTVWatcher {
+    String clientID;
+    Client client;
+    Map<String, LichessTVSock> tvClients = new HashMap<>();
+    static Logger logger = Logger.getLogger(LichessTVLogger.class.getName());
+    static FileHandler logFileHandler;
+    static File logFile;
+    long lastPurge = System.currentTimeMillis();
+
+    Enums.Channel currentChannel = Enums.Channel.blitz;
+
+    public void pause(long t) {
+        try { Thread.sleep(t); } catch (InterruptedException ignore) {}
+    }
+
+    public void followGame(String id) {
+        pause(1000);
+        try {
+            LichessTVSock client = new LichessTVSock(id,this);
+            if (tvClients.put(id, client) == null) client.connect();
+        }
+        catch (URISyntaxException e) { log2File(Level.WARNING,"URI Augh: " + e.getMessage()); }
+    }
+
+    public boolean watchTVGames() {
+        try {
+            pause(1000);
+            loadTV(currentChannel).stream().filter(id -> tvClients.get(id) == null).forEach(this::followGame);
+            purgeCheck();
+            return true;
+        }
+        catch (Exception oops) {
+            if (oops instanceof LichessTVLogger.ChariotException) {
+                log2File(Level.WARNING,"Chariot Goof: " + oops.getMessage());
+            } else {
+                log2File(Level.WARNING,"Unexpected Exception: " + oops.getMessage());
+            }
+        }
+        return false;
+    }
+
+    public void purgeCheck() {
+        if (System.currentTimeMillis() - lastPurge > 15 * 60 * 1000) {
+            log2File(Level.INFO,"Purging: " + clientID);
+            tvClients.keySet().stream().filter(k -> tvClients.get(k).isClosed()).forEach(id -> tvClients.remove(id));
+            lastPurge = System.currentTimeMillis();
+        }
+    }
+
+    public Set<String> loadTV(Enums.Channel channel) throws LichessTVLogger.ChariotException {
+        Many<Game> games = client.games().byChannel(channel);
+        if (games instanceof Fail(int statusCode, var err)) throw
+                new LichessTVLogger.ChariotException(statusCode, "(loadTV) " + err.message());
+        return games.stream().map(Game::id).collect(Collectors.toSet());
+    }
+
+    public static void updateLogfile() throws IOException {
+        String fileName = ZonedDateTime.now(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_DATE) + ".xml";
+        if (logFileHandler == null || !logFile.getName().equals(fileName)) {
+            log("Creating new log file: " + fileName);
+            logFile = new File("logs/" + fileName);
+            if (logFile.exists() && logFile.delete()) log("Deleted old log file: " + fileName);
+            if (logFile.exists() || logFile.createNewFile()) {
+                log("Log file created: " + logFile.getAbsolutePath());
+                if (logFileHandler != null) {
+                    logger.removeHandler(logFileHandler);
+                    logFileHandler.close();
+                }
+                logFileHandler = new FileHandler(logFile.getAbsolutePath());
+                logger.addHandler(logFileHandler);
+            }
+        }
+    }
+
+    public static void log2File(Level level, String message) {
+        try {
+            updateLogfile();
+            logger.log(level,message);
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void log(String str) { log(str,true); }
+    public static void log(String str, boolean cr) {
+        if (cr) logger.log(Level.INFO,str); else System.out.print(str);
+    }
+}
