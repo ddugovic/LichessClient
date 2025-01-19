@@ -43,10 +43,10 @@ abstract public class LichessClient implements LichessTVWatcher {
         catch (URISyntaxException e) { log2File(Level.WARNING,"URI Augh: " + e.getMessage()); }
     }
 
-    public boolean watchTVGames() {
+    public boolean watchTVGames(int n, Enums.Channel channel) {
         try {
             pause(1000);
-            loadTV(currentChannel).stream().filter(id -> tvClients.get(id) == null).forEach(this::followGame);
+            loadTV(n,channel).stream().filter(id -> tvClients.get(id) == null).forEach(this::followGame);
             purgeCheck();
             return true;
         }
@@ -68,8 +68,8 @@ abstract public class LichessClient implements LichessTVWatcher {
         }
     }
 
-    public Set<String> loadTV(Enums.Channel channel) throws LichessTVLogger.ChariotException {
-        Many<Game> games = client.games().byChannel(channel);
+    public Set<String> loadTV(int n, Enums.Channel channel) throws LichessTVLogger.ChariotException {
+        Many<Game> games = client.games().byChannel(channel,channelFilter -> channelFilter.nb(n));
         if (games instanceof Fail(int statusCode, var err)) throw
                 new LichessTVLogger.ChariotException(statusCode, "(loadTV) " + err.message());
         return games.stream().map(Game::id).collect(Collectors.toSet());

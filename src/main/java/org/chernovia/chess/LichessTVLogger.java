@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.java_websocket.client.WebSocketClient;
 import java.util.logging.Level;
 
-public class LichessTVLogger extends LichessClient implements Runnable, LichessTVWatcher {
+public class LichessTVLogger extends LichessClient implements Runnable {
     GameBase gameBase;
     String dbUri, dbUsr, dbPwd, dbName;
     boolean logging;
@@ -44,7 +44,7 @@ public class LichessTVLogger extends LichessClient implements Runnable, LichessT
                 clientID = "lichess_logger" + (int)(Math.random() * 999);
                 client = Client.basic();
                 log2File(Level.INFO,"Starting: " + clientID);
-                logging = watchTVGames();
+                logging = watchTVGames(10,currentChannel);
                 do pause(60 * 1000); while (logging && countGames() > 0);
                 log2File(Level.INFO,"Rebooting: " + clientID);
                 pause(8000);
@@ -118,7 +118,7 @@ public class LichessTVLogger extends LichessClient implements Runnable, LichessT
         log("Game Closed: " + id);
         try {
             addGameToDB(id);
-            logging = watchTVGames();
+            logging = watchTVGames(10,currentChannel);
         } catch (Exception e) {
             if (e instanceof ChariotException) log2File(Level.WARNING,"*** Chariot Goof ***");
             log2File(Level.WARNING,"Game insertion error (id "  +  id + "): " + e.getMessage());
