@@ -29,6 +29,7 @@ public class LichessTVLogger extends LichessClient implements Runnable {
     }
 
     public LichessTVLogger(String uri, String usr, String pwd, String db) {
+        super("lichess_logger" + (int)(Math.random() * 999));
         dbUri = uri; dbUsr = usr; dbPwd = pwd; dbName = db;
     }
 

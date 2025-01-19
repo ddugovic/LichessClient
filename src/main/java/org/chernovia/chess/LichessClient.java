@@ -20,15 +20,43 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 abstract public class LichessClient implements LichessTVWatcher {
+    public String getClientID() {
+        return clientID;
+    }
+
+    public void setClientID(String clientID) {
+        this.clientID = clientID;
+    }
+
+    public Client getClient() {
+        return client;
+    }
+
+    public void setClient(Client client) {
+        this.client = client;
+    }
+
+    public Enums.Channel getCurrentChannel() {
+        return currentChannel;
+    }
+
+    public void setCurrentChannel(Enums.Channel currentChannel) {
+        this.currentChannel = currentChannel;
+    }
+
     String clientID;
     Client client;
     Map<String, LichessTVSock> tvClients = new HashMap<>();
+    Enums.Channel currentChannel = Enums.Channel.blitz;
+    long lastPurge = System.currentTimeMillis();
     static Logger logger = Logger.getLogger(LichessTVLogger.class.getName());
     static FileHandler logFileHandler;
     static File logFile;
-    long lastPurge = System.currentTimeMillis();
 
-    Enums.Channel currentChannel = Enums.Channel.blitz;
+    public LichessClient(String id) {
+        clientID = id;
+        client = Client.basic();
+    }
 
     public void pause(long t) {
         try { Thread.sleep(t); } catch (InterruptedException ignore) {}
